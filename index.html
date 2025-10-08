@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>What's Open Now</title>
+    
+    <!-- PWA / Home Screen App Settings -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="What's Open">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#667eea">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .current-time {
+            font-size: 1.2em;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+
+        .time-controls {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+        }
+
+        .time-btn {
+            padding: 6px 10px;
+            border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .time-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        #customTime {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .places {
+            display: grid;
+            gap: 15px;
+        }
+
+        .place-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+        }
+
+        .place-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .place-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .place-name {
+            font-size: 1.4em;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .status {
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        .status.open {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status.closed {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .hours {
+            color: #4a5568;
+            font-size: 1em;
+            margin-top: 8px;
+        }
+
+        .time-slot {
+            margin: 5px 0;
+            padding: 8px;
+            background: #f7fafc;
+            border-radius: 6px;
+        }
+
+        .time-slot.current {
+            background: #e6fffa;
+            border-left: 3px solid #38b2ac;
+        }
+
+        .time-slot.next {
+            background: #fef5e7;
+            border-left: 3px solid #f59e0b;
+        }
+
+        .closes-soon {
+            color: #d69e2e;
+            font-size: 0.9em;
+            margin-top: 5px;
+            font-weight: 500;
+        }
+
+        .next-available {
+            color: #2563eb;
+            font-size: 0.95em;
+            margin-top: 8px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>What's Open Now</h1>
+            <div class="current-time" id="currentTime"></div>
+            <div class="time-controls">
+                <input type="datetime-local" id="customTime" />
+                <button class="time-btn" id="setTimeBtn">🕐 Set Time</button>
+                <button class="time-btn" id="resetBtn" style="display: none;">↻ Now</button>
+            </div>
+        </div>
+        <div class="places" id="placesContainer"></div>
+    </div>
+
+    <script>
+        // Custom time for testing
+        let customDateTime = null;
+
+        // ===== EDIT YOUR PLACES HERE =====
+        // Each day can have multiple time slots (array) or be closed (null)
+        const places = [
+            {
+                name: "Mānoa Public Library",
+                hours: {
+                    monday: [{ open: "09:00", close: "16:00" }],
+                    tuesday: [{ open: "09:00", close: "16:00" }],
+                    wednesday: [{ open: "12:00", close: "19:00" }],
+                    thursday: [{ open: "12:00", close: "19:00" }],
+                    friday: [{ open: "11:00", close: "16:00" }],
+                    saturday: [{ open: "09:00", close: "16:00" }],
+                    sunday: null
+                }
+            },
+            {
+                name: "McCully-Mō'ili'ili Library",
+                hours: {
+                    monday: null,
+                    tuesday: [{ open: "09:00", close: "16:00" }],
+                    wednesday: [{ open: "09:00", close: "16:00" }],
+                    thursday: [{ open: "12:00", close: "19:00" }],
+                    friday: [{ open: "11:00", close: "16:00" }],
+                    saturday: [{ open: "09:00", close: "16:00" }],
+                    sunday: null
+                }
+            },
+            {
+                name: "Kaimuki Public Library",
+                hours: {
+                    monday: [{ open: "09:00", close: "19:00" }],
+                    tuesday: [{ open: "09:00", close: "19:00" }],
+                    wednesday: [{ open: "10:00", close: "18:00" }],
+                    thursday: [{ open: "10:00", close: "18:00" }],
+                    friday: [{ open: "11:00", close: "16:00" }],
+                    saturday: null,
+                    sunday: [{ open: "09:00", close: "16:00" }]
+                }
+            },
+            {
+                name: "Hawaiʻi State Library",
+                hours: {
+                    monday: [{ open: "09:00", close: "16:00" }],
+                    tuesday: [{ open: "09:00", close: "16:00" }],
+                    wednesday: [{ open: "09:00", close: "16:00" }],
+                    thursday: [{ open: "09:00", close: "19:00" }],
+                    friday: [{ open: "11:00", close: "16:00" }],
+                    saturday: [{ open: "09:00", close: "16:00" }],
+                    sunday: null
+                }
+            },
+            {
+                name: "Makiki Pool",
+                hours: {
+                    monday: [{ open: "13:00", close: "17:00" }],
+                    tuesday: [{ open: "13:00", close: "16:30" }],
+                    wednesday: [{ open: "13:00", close: "17:00" }],
+                    thursday: [{ open: "13:00", close: "16:30" }],
+                    friday: [{ open: "13:00", close: "17:00" }],
+                    saturday: [{ open: "13:00", close: "17:00" }],
+                    sunday: null
+                }
+            },
+            {
+                name: "Manoa Pool",
+                hours: {
+                    monday: [
+                        { open: "10:00", close: "13:00" },
+                        { open: "15:30", close: "17:00" },
+                        { open: "18:30", close: "20:30" }
+                    ],
+                    tuesday: null,
+                    wednesday: [
+                        { open: "09:00", close: "12:00" },
+                        { open: "15:30", close: "17:00" },
+                        { open: "18:30", close: "20:30" }
+                    ],
+                    thursday: [{ open: "15:30", close: "17:00" }],
+                    friday: [
+                        { open: "10:00", close: "12:00" },
+                        { open: "15:30", close: "17:00" }
+                    ],
+                    saturday: [{ open: "13:00", close: "17:00" }],
+                    sunday: [{ open: "13:00", close: "17:00" }]
+                }
+            }
+        ];
+
+        function timeToMinutes(timeStr) {
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            return hours * 60 + minutes;
+        }
+
+        function formatTime(timeStr) {
+            const [hours, minutes] = timeStr.split(':');
+            const h = parseInt(hours);
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
+            return `${displayHour}:${minutes} ${ampm}`;
+        }
+
+        function getDayName(offset = 0) {
+            const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+            const date = customDateTime ? new Date(customDateTime) : new Date();
+            date.setDate(date.getDate() + offset);
+            return days[date.getDay()];
+        }
+
+        function getDayDisplayName(offset = 0) {
+            if (offset === 0) return 'Today';
+            if (offset === 1) return 'Tomorrow';
+            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+            const date = customDateTime ? new Date(customDateTime) : new Date();
+            date.setDate(date.getDate() + offset);
+            return days[date.getDay()];
+        }
+
+        function getCurrentTimeInMinutes() {
+            const now = customDateTime ? new Date(customDateTime) : new Date();
+            return now.getHours() * 60 + now.getMinutes();
+        }
+
+        function checkStatus(place) {
+            const currentDay = getDayName();
+            const todaySlots = place.hours[currentDay];
+            const currentMinutes = getCurrentTimeInMinutes();
+            
+            let currentSlot = null;
+            let remainingSlots = [];
+            let closesSoon = false;
+            let minutesUntilClose = 0;
+
+            // Check today's slots and filter out past ones
+            if (todaySlots) {
+                for (let slot of todaySlots) {
+                    const openMinutes = timeToMinutes(slot.open);
+                    const closeMinutes = timeToMinutes(slot.close);
+
+                    // Only include slots that haven't completely passed
+                    if (currentMinutes < closeMinutes) {
+                        remainingSlots.push(slot);
+
+                        // Check if currently open
+                        if (currentMinutes >= openMinutes && currentMinutes < closeMinutes) {
+                            currentSlot = slot;
+                            minutesUntilClose = closeMinutes - currentMinutes;
+                            closesSoon = minutesUntilClose <= 60;
+                        }
+                    }
+                }
+            }
+
+            // If no more slots today, find next available day
+            let nextAvailable = null;
+            if (remainingSlots.length === 0) {
+                for (let offset = 1; offset <= 7; offset++) {
+                    const dayName = getDayName(offset);
+                    const slots = place.hours[dayName];
+                    if (slots && slots.length > 0) {
+                        nextAvailable = {
+                            day: getDayDisplayName(offset),
+                            slots: slots  // All slots for that day
+                        };
+                        break;
+                    }
+                }
+            }
+
+            return {
+                isOpen: currentSlot !== null,
+                currentSlot,
+                remainingSlots,
+                nextAvailable,
+                closesSoon,
+                minutesUntilClose
+            };
+        }
+
+        function renderPlaces() {
+            const container = document.getElementById('placesContainer');
+            container.innerHTML = '';
+
+            // Sort places: open ones first, then closed ones
+            const sortedPlaces = [...places].sort((a, b) => {
+                const statusA = checkStatus(a);
+                const statusB = checkStatus(b);
+                
+                if (statusA.isOpen && !statusB.isOpen) return -1;
+                if (!statusA.isOpen && statusB.isOpen) return 1;
+                return 0;
+            });
+
+            sortedPlaces.forEach(place => {
+                const status = checkStatus(place);
+                const card = document.createElement('div');
+                card.className = 'place-card';
+
+                let slotsHTML = '';
+                
+                // Show remaining slots for today (not in the past)
+                if (status.remainingSlots && status.remainingSlots.length > 0) {
+                    slotsHTML = '<div class="hours"><strong>Today:</strong></div>';
+                    status.remainingSlots.forEach(slot => {
+                        const isCurrent = status.currentSlot === slot;
+                        const slotClass = isCurrent ? 'current' : '';
+                        slotsHTML += `
+                            <div class="time-slot ${slotClass}">
+                                ${formatTime(slot.open)} - ${formatTime(slot.close)}
+                                ${isCurrent ? ' • <strong>Open now</strong>' : ''}
+                            </div>
+                        `;
+                    });
+                } else if (status.nextAvailable) {
+                    // Show all slots for next available day
+                    slotsHTML = `<div class="hours"><strong>Next: ${status.nextAvailable.day}</strong></div>`;
+                    status.nextAvailable.slots.forEach(slot => {
+                        slotsHTML += `
+                            <div class="time-slot">
+                                ${formatTime(slot.open)} - ${formatTime(slot.close)}
+                            </div>
+                        `;
+                    });
+                } else {
+                    slotsHTML = '<div class="hours">Closed this week</div>';
+                }
+
+                let warningText = '';
+                if (status.closesSoon) {
+                    warningText = `<div class="closes-soon">⏰ Closes in ${status.minutesUntilClose} minutes</div>`;
+                }
+
+                card.innerHTML = `
+                    <div class="place-header">
+                        <div class="place-name">${place.name}</div>
+                        <div class="status ${status.isOpen ? 'open' : 'closed'}">
+                            ${status.isOpen ? '✓ Open' : '✗ Closed'}
+                        </div>
+                    </div>
+                    ${slotsHTML}
+                    ${warningText}
+                `;
+
+                container.appendChild(card);
+            });
+        }
+
+        function updateCurrentTime() {
+            const now = customDateTime ? new Date(customDateTime) : new Date();
+            const options = { 
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            };
+            const timeStr = now.toLocaleDateString('en-US', options);
+            const timeDisplay = document.getElementById('currentTime');
+            
+            if (customDateTime) {
+                timeDisplay.textContent = `⏰ ${timeStr}`;
+            } else {
+                timeDisplay.textContent = timeStr;
+            }
+        }
+
+        // Event listeners for time controls
+        document.getElementById('setTimeBtn').addEventListener('click', () => {
+            document.getElementById('customTime').click();
+        });
+
+        document.getElementById('customTime').addEventListener('change', (e) => {
+            if (e.target.value) {
+                customDateTime = e.target.value;
+                document.getElementById('resetBtn').style.display = 'inline-block';
+                updateCurrentTime();
+                renderPlaces();
+            }
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            customDateTime = null;
+            document.getElementById('customTime').value = '';
+            document.getElementById('resetBtn').style.display = 'none';
+            updateCurrentTime();
+            renderPlaces();
+        });
+
+        // Initial render
+        updateCurrentTime();
+        renderPlaces();
+
+        // Update every minute (only if not using custom time)
+        setInterval(() => {
+            if (!customDateTime) {
+                updateCurrentTime();
+                renderPlaces();
+            }
+        }, 60000);
+    </script>
+</body>
+</html>
