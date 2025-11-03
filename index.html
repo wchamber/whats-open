@@ -168,6 +168,137 @@
             margin-top: 8px;
             font-weight: 500;
         }
+
+        /* UV Index Section */
+        .uv-section {
+            margin-top: 30px;
+        }
+
+        .uv-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .uv-header {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .uv-error {
+            color: #718096;
+            font-size: 0.85em;
+            text-align: center;
+            padding: 10px;
+        }
+
+        .uv-current {
+            text-align: center;
+            padding: 20px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .uv-current-label {
+            font-size: 0.9em;
+            color: #718096;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .uv-current-value {
+            font-size: 3.5em;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+
+        .uv-current-level {
+            font-size: 1.1em;
+            font-weight: 600;
+            padding: 6px 16px;
+            border-radius: 20px;
+            display: inline-block;
+        }
+
+        .uv-hourly {
+            margin-top: 20px;
+        }
+
+        .uv-hourly-header {
+            font-size: 1em;
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 12px;
+        }
+
+        .uv-hourly-list {
+            display: grid;
+            gap: 8px;
+        }
+
+        .uv-hourly-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            background: #f7fafc;
+            border-radius: 6px;
+            font-size: 0.95em;
+        }
+
+        .uv-hourly-time {
+            color: #4a5568;
+            font-weight: 500;
+        }
+
+        .uv-hourly-value {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .uv-hourly-number {
+            font-weight: 700;
+            font-size: 1.1em;
+        }
+
+        .uv-hourly-badge {
+            font-size: 0.85em;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        /* UV Level Colors */
+        .uv-low {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .uv-moderate {
+            background: #fef5e7;
+            color: #744210;
+        }
+
+        .uv-high {
+            background: #fed7aa;
+            color: #7c2d12;
+        }
+
+        .uv-very-high {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .uv-extreme {
+            background: #e9d5ff;
+            color: #581c87;
+        }
     </style>
 </head>
 <body>
@@ -182,6 +313,25 @@
             </div>
         </div>
         <div class="places" id="placesContainer"></div>
+
+        <!-- UV Index Section -->
+        <div class="uv-section" id="uvSection">
+            <div class="uv-card">
+                <div class="uv-header">UV Index - Honolulu</div>
+                <div id="uvError" class="uv-error" style="display: none;"></div>
+                <div id="uvContent" style="display: none;">
+                    <div class="uv-current">
+                        <div class="uv-current-label">Current</div>
+                        <div class="uv-current-value" id="uvCurrentValue">--</div>
+                        <div class="uv-current-level" id="uvCurrentLevel">Loading...</div>
+                    </div>
+                    <div class="uv-hourly">
+                        <div class="uv-hourly-header">Hourly Forecast</div>
+                        <div class="uv-hourly-list" id="uvHourlyList"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -487,6 +637,118 @@
                 renderPlaces();
             }
         }, 60000);
+
+        // ===== UV INDEX FUNCTIONALITY =====
+
+        // Honolulu coordinates
+        const HONOLULU_LAT = 21.3099;
+        const HONOLULU_LON = -157.8581;
+
+        function getUVLevel(uvi) {
+            if (uvi <= 2) return { name: 'Low', class: 'uv-low' };
+            if (uvi <= 5) return { name: 'Moderate', class: 'uv-moderate' };
+            if (uvi <= 7) return { name: 'High', class: 'uv-high' };
+            if (uvi <= 10) return { name: 'Very High', class: 'uv-very-high' };
+            return { name: 'Extreme', class: 'uv-extreme' };
+        }
+
+        async function fetchUVData() {
+            try {
+                const url = `https://currentuvindex.com/api/v1/uvi?latitude=${HONOLULU_LAT}&longitude=${HONOLULU_LON}`;
+                const response = await fetch(url);
+
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (!data.ok) {
+                    throw new Error(data.message || 'API returned error');
+                }
+
+                renderUVChart(data);
+            } catch (error) {
+                console.error('UV API Error:', error);
+                showUVError();
+            }
+        }
+
+        function renderUVChart(data) {
+            const errorDiv = document.getElementById('uvError');
+            const contentDiv = document.getElementById('uvContent');
+
+            // Hide error, show content
+            errorDiv.style.display = 'none';
+            contentDiv.style.display = 'block';
+
+            // Render current UV
+            const currentUVI = Math.round(data.now.uvi);
+            const currentLevel = getUVLevel(currentUVI);
+
+            document.getElementById('uvCurrentValue').textContent = currentUVI;
+            const levelElement = document.getElementById('uvCurrentLevel');
+            levelElement.textContent = currentLevel.name;
+            levelElement.className = `uv-current-level ${currentLevel.class}`;
+
+            // Render hourly forecast until next 0
+            const hourlyList = document.getElementById('uvHourlyList');
+            hourlyList.innerHTML = '';
+
+            if (data.forecast && data.forecast.length > 0) {
+                // Filter forecast until we hit UV index of 0 (inclusive)
+                let hourlyItems = [];
+                for (let item of data.forecast) {
+                    hourlyItems.push(item);
+                    if (Math.round(item.uvi) === 0) {
+                        break;
+                    }
+                }
+
+                // Render hourly items
+                hourlyItems.forEach(item => {
+                    const time = new Date(item.time);
+                    const uvi = Math.round(item.uvi);
+                    const level = getUVLevel(uvi);
+
+                    const hourlyDiv = document.createElement('div');
+                    hourlyDiv.className = 'uv-hourly-item';
+
+                    const timeStr = time.toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true
+                    });
+
+                    hourlyDiv.innerHTML = `
+                        <div class="uv-hourly-time">${timeStr}</div>
+                        <div class="uv-hourly-value">
+                            <div class="uv-hourly-number" style="color: ${uvi === 0 ? '#718096' : '#2d3748'}">${uvi}</div>
+                            <div class="uv-hourly-badge ${level.class}">${level.name}</div>
+                        </div>
+                    `;
+
+                    hourlyList.appendChild(hourlyDiv);
+                });
+            } else {
+                hourlyList.innerHTML = '<div style="text-align: center; color: #718096; padding: 10px;">No forecast data available</div>';
+            }
+        }
+
+        function showUVError() {
+            const errorDiv = document.getElementById('uvError');
+            const contentDiv = document.getElementById('uvContent');
+
+            errorDiv.style.display = 'block';
+            contentDiv.style.display = 'none';
+            errorDiv.textContent = 'UV data temporarily unavailable';
+        }
+
+        // Fetch UV data on page load
+        fetchUVData();
+
+        // Refresh UV data every 30 minutes
+        setInterval(fetchUVData, 30 * 60 * 1000);
     </script>
 </body>
 </html>
