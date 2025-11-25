@@ -615,6 +615,10 @@
                 document.getElementById('resetBtn').style.display = 'inline-block';
                 updateCurrentTime();
                 renderPlaces();
+                // Re-render UV chart with new time
+                if (uvData) {
+                    renderUVChart(uvData);
+                }
             }
         });
 
@@ -624,6 +628,10 @@
             document.getElementById('resetBtn').style.display = 'none';
             updateCurrentTime();
             renderPlaces();
+            // Re-render UV chart with current time
+            if (uvData) {
+                renderUVChart(uvData);
+            }
         });
 
         // Initial render
@@ -639,6 +647,9 @@
         }, 60000);
 
         // ===== UV INDEX FUNCTIONALITY =====
+
+        // Store UV data globally for re-rendering on time change
+        let uvData = null;
 
         // Honolulu coordinates
         const HONOLULU_LAT = 21.3099;
@@ -667,6 +678,8 @@
                     throw new Error(data.message || 'API returned error');
                 }
 
+                // Store data globally for re-rendering on time change
+                uvData = data;
                 renderUVChart(data);
             } catch (error) {
                 console.error('UV API Error:', error);
@@ -682,28 +695,117 @@
             errorDiv.style.display = 'none';
             contentDiv.style.display = 'block';
 
-            // Render current UV
-            const currentUVI = Math.round(data.now.uvi);
+            // Get selected time
+            const selectedTime = customDateTime ? new Date(customDateTime) : new Date();
+
+            // Find UV value at selected time
+            let uvAtSelectedTime = data.now.uvi;
+            let uvLabel = 'Current';
+
+            if (customDateTime && data.forecast && data.forecast.length > 0) {
+                // Find the forecast entry closest to selected time
+                const selectedTimestamp = selectedTime.getTime();
+                let closestItem = null;
+                let closestDiff = Infinity;
+
+                for (let item of data.forecast) {
+                    const itemTime = new Date(item.time).getTime();
+                    const diff = Math.abs(itemTime - selectedTimestamp);
+                    if (diff < closestDiff) {
+                        closestDiff = diff;
+                        closestItem = item;
+                    }
+                }
+
+                if (closestItem) {
+                    uvAtSelectedTime = closestItem.uvi;
+                    const timeStr = selectedTime.toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true
+                    });
+                    uvLabel = `At ${timeStr}`;
+                }
+            }
+
+            const currentUVI = Math.round(uvAtSelectedTime);
             const currentLevel = getUVLevel(currentUVI);
 
-            document.getElementById('uvCurrentValue').textContent = currentUVI;
-            const levelElement = document.getElementById('uvCurrentLevel');
-            levelElement.textContent = currentLevel.name;
-            levelElement.className = `uv-current-level ${currentLevel.class}`;
-
-            // Render hourly forecast until next 0
+            // Render hourly forecast
             const hourlyList = document.getElementById('uvHourlyList');
             hourlyList.innerHTML = '';
 
             if (data.forecast && data.forecast.length > 0) {
-                // Filter forecast until we hit UV index of 0 (inclusive)
                 let hourlyItems = [];
-                for (let item of data.forecast) {
-                    hourlyItems.push(item);
-                    if (Math.round(item.uvi) === 0) {
-                        break;
+                let showingNextPeriod = false;
+
+                // Filter forecast entries from selected time onwards
+                const selectedTimestamp = selectedTime.getTime();
+                let futureForecasts = data.forecast.filter(item =>
+                    new Date(item.time).getTime() >= selectedTimestamp - 30 * 60 * 1000 // Allow 30 min tolerance
+                );
+
+                if (currentUVI === 0) {
+                    // Find the next period of non-zero UV values
+                    let foundNonZero = false;
+                    let periodEnded = false;
+
+                    for (let item of futureForecasts) {
+                        const uvi = Math.round(item.uvi);
+
+                        if (!foundNonZero) {
+                            // Looking for start of non-zero period
+                            if (uvi > 0) {
+                                foundNonZero = true;
+                                hourlyItems.push(item);
+                                showingNextPeriod = true;
+                            }
+                        } else {
+                            // In non-zero period, continue until we hit 0
+                            hourlyItems.push(item);
+                            if (uvi === 0) {
+                                periodEnded = true;
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    // UV is non-zero, show until it hits 0
+                    for (let item of futureForecasts) {
+                        hourlyItems.push(item);
+                        if (Math.round(item.uvi) === 0) {
+                            break;
+                        }
                     }
                 }
+
+                // Update label and display value if showing next period
+                if (showingNextPeriod && hourlyItems.length > 0) {
+                    const nextPeriodStart = new Date(hourlyItems[0].time);
+                    const nextPeriodStartStr = nextPeriodStart.toLocaleString('en-US', {
+                        weekday: 'short',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true
+                    });
+                    uvLabel = `Next UV (${nextPeriodStartStr})`;
+
+                    // Show the peak UV for the next period
+                    const peakUVI = Math.max(...hourlyItems.map(item => Math.round(item.uvi)));
+                    document.getElementById('uvCurrentValue').textContent = peakUVI;
+                    const peakLevel = getUVLevel(peakUVI);
+                    const levelElement = document.getElementById('uvCurrentLevel');
+                    levelElement.textContent = `Peak: ${peakLevel.name}`;
+                    levelElement.className = `uv-current-level ${peakLevel.class}`;
+                } else {
+                    document.getElementById('uvCurrentValue').textContent = currentUVI;
+                    const levelElement = document.getElementById('uvCurrentLevel');
+                    levelElement.textContent = currentLevel.name;
+                    levelElement.className = `uv-current-level ${currentLevel.class}`;
+                }
+
+                // Update the label
+                document.querySelector('.uv-current-label').textContent = uvLabel;
 
                 // Render hourly items
                 hourlyItems.forEach(item => {
@@ -714,7 +816,8 @@
                     const hourlyDiv = document.createElement('div');
                     hourlyDiv.className = 'uv-hourly-item';
 
-                    const timeStr = time.toLocaleTimeString('en-US', {
+                    const timeStr = time.toLocaleString('en-US', {
+                        weekday: 'short',
                         hour: 'numeric',
                         minute: '2-digit',
                         hour12: true
@@ -730,6 +833,10 @@
 
                     hourlyList.appendChild(hourlyDiv);
                 });
+
+                if (hourlyItems.length === 0) {
+                    hourlyList.innerHTML = '<div style="text-align: center; color: #718096; padding: 10px;">No UV forecast available for this period</div>';
+                }
             } else {
                 hourlyList.innerHTML = '<div style="text-align: center; color: #718096; padding: 10px;">No forecast data available</div>';
             }
